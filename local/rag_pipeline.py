@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -8,19 +9,19 @@ from langchain_community.vectorstores import FAISS
 from ollama_client import OllamaClient
 
 RAG_TEMPLATE = """Tu es un assistant expert en analyse de documents.
-Réponds UNIQUEMENT à partir des extraits du document fournis ci-dessous.
-Quand tu réponds, précise si possible dans quel document se trouve l'information.
+Réponds UNIQUEMENT à partir des extraits fournis ci-dessous.
+Les extraits peuvent venir soit du texte du PDF, soit d'une description d'image/schéma.
+Quand l'information vient d'un schéma ou d'une image, indique-le clairement.
 Si la réponse ne se trouve pas dans les extraits, réponds exactement :
 "Je ne trouve pas cette information dans le document."
 
-Extraits du document :
+Extraits :
 {context}
 
 Question : {question}
 
 Réponse :
 """
-
 
 def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file=None, doc_id=None):
     loader = PyPDFLoader(pdf_path)
@@ -29,6 +30,7 @@ def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file
     for doc in documents:
         doc.metadata["source_file"] = source_file if source_file else doc.metadata.get("source", "inconnu")
         doc.metadata["doc_id"] = doc_id if doc_id else "unknown"
+        doc.metadata["content_type"] = "text"
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -41,9 +43,9 @@ def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file
     for chunk in chunks:
         chunk.metadata["source_file"] = source_file if source_file else chunk.metadata.get("source", "inconnu")
         chunk.metadata["doc_id"] = doc_id if doc_id else "unknown"
+        chunk.metadata["content_type"] = "text"
 
     return chunks
-
 
 def build_vectorstore(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2"):
     embeddings = HuggingFaceEmbeddings(
@@ -55,22 +57,25 @@ def build_vectorstore(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2
     vectorstore.save_local("faiss_index")
     return vectorstore, embeddings
 
-
 def load_vectorstore(model_name="sentence-transformers/all-MiniLM-L6-v2"):
     embeddings = HuggingFaceEmbeddings(model_name=model_name)
     return FAISS.load_local(
-        "faiss_index", embeddings, allow_dangerous_deserialization=True
+        "faiss_index",
+        embeddings,
+        allow_dangerous_deserialization=True
     )
 
-
-def format_context(docs, max_chars=6000):
+def format_context(docs, max_chars=7000):
     parts = []
     total = 0
 
     for d in docs:
         page = d.metadata.get("page", "?")
         source_file = d.metadata.get("source_file", "Document inconnu")
-        chunk = f"[Document: {source_file} | Page: {page}] {d.page_content.strip()}"
+        content_type = d.metadata.get("content_type", "text")
+
+        prefix = "SCHÉMA/IMAGE" if content_type == "image" else "TEXTE"
+        chunk = f"[{prefix} | Document: {source_file} | Page: {page}] {d.page_content.strip()}"
 
         if total + len(chunk) > max_chars:
             break
@@ -79,7 +84,6 @@ def format_context(docs, max_chars=6000):
         total += len(chunk)
 
     return "\n\n".join(parts)
-
 
 class ChatPDFRAG:
     def __init__(self, vectorstore, ollama_model="llama3.2", k=4, timeout=180):
@@ -97,14 +101,14 @@ class ChatPDFRAG:
         docs = self.vectorstore.similarity_search(
             question,
             k=max(self.k * 5, 20),
-            filter=filter_dict
+            filter=filter_dict,
+            fetch_k=max(self.k * 8, 30),
         )
 
         docs = docs[:self.k]
 
         context = format_context(docs)
         prompt = RAG_TEMPLATE.format(context=context, question=question)
-
         answer = self.ollama.call_ollama(prompt, timeout=self.timeout)
 
         grouped_sources = defaultdict(list)
