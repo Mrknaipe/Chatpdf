@@ -8,7 +8,7 @@ st.title("📄 ChatPDF — RAG (Ollama en local)")
 
 with st.sidebar:
     st.header("⚙️ Configuration")
-    uploaded_file = st.file_uploader("Charger un PDF", type="pdf")
+    uploaded_file = st.file_uploader("Charger un PDF", type="pdf",accept_multiple_files=True)
 
     ollama_model = st.text_input("Modèle Ollama", value="llama3.2")
     chunk_size = st.slider("Taille des chunks", 300, 1500, 800, step=100)
@@ -22,24 +22,37 @@ if "rag" not in st.session_state:
     st.session_state.rag = None
 if "history" not in st.session_state:
     st.session_state.history = []
+if "chunks_by_doc" not in st.session_state:
+    st.session_state.chunks_by_doc = {}
 
 if process_btn and uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-        tmp.write(uploaded_file.read())
-        tmp_path = tmp.name
+    st.session_state.chunks_by_doc = {}
+    total_chunks = 0
 
-    with st.spinner("Lecture + chunking + indexation FAISS..."):
-        chunks = load_and_split(tmp_path, chunk_size, chunk_overlap)
-        vectorstore, _ = build_vectorstore(chunks)
-        st.session_state.rag = ChatPDFRAG(
-            vectorstore=vectorstore,
-            ollama_model=ollama_model,
-            k=k_retrieval,
-            timeout=timeout
-        )
+    for idx, i in enumerate(uploaded_file, start=1):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(i.read())
+            tmp_path = tmp.name
+
+        with st.spinner("Lecture + chunking + indexation FAISS..."):
+            chunks = load_and_split(tmp_path, chunk_size, chunk_overlap)
+            st.session_state.chunks_by_doc[idx] = {
+                "document_name": i.name,
+                "chunks": chunks,
+            }
+            total_chunks += len(chunks)
+
+            vectorstore, _ = build_vectorstore(chunks)
+            st.session_state.rag = ChatPDFRAG(
+                vectorstore=vectorstore,
+                ollama_model=ollama_model,
+                k=k_retrieval,
+                timeout=timeout
+            )
+            print("doc fini")
 
     os.unlink(tmp_path)
-    st.success(f"✅ Document indexé — {len(chunks)} chunks.")
+    st.success(f"✅ {len(st.session_state.chunks_by_doc)} document(s) indexé(s) — {total_chunks} chunks.")
 
 if st.session_state.rag:
     for role, msg in st.session_state.history:
@@ -49,7 +62,7 @@ if st.session_state.rag:
         st.chat_message("user").write(question)
 
         with st.spinner("Recherche + génération (Ollama)..."):
-            answer, sources = st.session_state.rag.ask(question)
+            answer, sources = st.session_state.rag.ask(question, selected_files=list(st.session_state.chunks_by_doc.keys()))
 
         st.chat_message("assistant").write(answer)
 

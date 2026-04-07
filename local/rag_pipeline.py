@@ -72,8 +72,16 @@ class ChatPDFRAG:
         self.ollama = OllamaClient(model=ollama_model)
         self.ollama.verify_ollama()
 
-    def ask(self, question: str):
-        docs = self.vectorstore.similarity_search(question, k=self.k)
+    def ask(self, question: str, selected_files=None):
+        docs = self.vectorstore.similarity_search(question, k=max(self.k * 5, 20))
+
+        if selected_files and "Select all" not in selected_files:
+            docs = [
+                d for d in docs
+                if d.metadata.get("source_file") in selected_files
+            ]
+
+        docs = docs[:self.k]
 
         context = format_context(docs)
         prompt = RAG_TEMPLATE.format(context=context, question=question)

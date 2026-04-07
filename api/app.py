@@ -1,6 +1,6 @@
 import streamlit as st
 import tempfile, os
-from api.rag_pipeline import load_and_split, build_vectorstore, build_rag_chain
+from rag_pipeline import load_and_split, build_vectorstore, build_rag_chain
 
 st.set_page_config(page_title="ChatPDF — RAG", page_icon="📄", layout="wide")
 st.title("📄 ChatPDF — Posez vos questions sur votre document")

@@ -1,0 +1,18 @@
+# requirements.txt
+
+streamlit
+
+# LangChain ecosystem
+langchain
+langchain-community
+langchain-huggingface
+
+# Document loaders & PDF
+pypdf
+
+# Embeddings & Vector store
+sentence-transformers
+faiss-cpu
+
+# Ollama client (si ollama_client est un package pip)
+ollama
