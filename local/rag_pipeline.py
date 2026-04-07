@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -5,9 +7,9 @@ from langchain_community.vectorstores import FAISS
 
 from ollama_client import OllamaClient
 
-
 RAG_TEMPLATE = """Tu es un assistant expert en analyse de documents.
 Réponds UNIQUEMENT à partir des extraits du document fournis ci-dessous.
+Quand tu réponds, précise si possible dans quel document se trouve l'information.
 Si la réponse ne se trouve pas dans les extraits, réponds exactement :
 "Je ne trouve pas cette information dans le document."
 
@@ -20,16 +22,26 @@ Réponse :
 """
 
 
-def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150):
+def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file=None, doc_id=None):
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
+
+    for doc in documents:
+        doc.metadata["source_file"] = source_file if source_file else doc.metadata.get("source", "inconnu")
+        doc.metadata["doc_id"] = doc_id if doc_id else "unknown"
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", ".", " ", ""],
     )
+
     chunks = splitter.split_documents(documents)
+
+    for chunk in chunks:
+        chunk.metadata["source_file"] = source_file if source_file else chunk.metadata.get("source", "inconnu")
+        chunk.metadata["doc_id"] = doc_id if doc_id else "unknown"
+
     return chunks
 
 
@@ -54,13 +66,18 @@ def load_vectorstore(model_name="sentence-transformers/all-MiniLM-L6-v2"):
 def format_context(docs, max_chars=6000):
     parts = []
     total = 0
+
     for d in docs:
         page = d.metadata.get("page", "?")
-        chunk = f"[Page {page}] {d.page_content.strip()}"
+        source_file = d.metadata.get("source_file", "Document inconnu")
+        chunk = f"[Document: {source_file} | Page: {page}] {d.page_content.strip()}"
+
         if total + len(chunk) > max_chars:
             break
+
         parts.append(chunk)
         total += len(chunk)
+
     return "\n\n".join(parts)
 
 
@@ -73,13 +90,15 @@ class ChatPDFRAG:
         self.ollama.verify_ollama()
 
     def ask(self, question: str, selected_files=None):
-        docs = self.vectorstore.similarity_search(question, k=max(self.k * 5, 20))
+        filter_dict = None
+        if selected_files:
+            filter_dict = {"source_file": {"$in": selected_files}}
 
-        if selected_files and "Select all" not in selected_files:
-            docs = [
-                d for d in docs
-                if d.metadata.get("source_file") in selected_files
-            ]
+        docs = self.vectorstore.similarity_search(
+            question,
+            k=max(self.k * 5, 20),
+            filter=filter_dict
+        )
 
         docs = docs[:self.k]
 
@@ -87,4 +106,10 @@ class ChatPDFRAG:
         prompt = RAG_TEMPLATE.format(context=context, question=question)
 
         answer = self.ollama.call_ollama(prompt, timeout=self.timeout)
-        return answer, docs
+
+        grouped_sources = defaultdict(list)
+        for doc in docs:
+            doc_name = doc.metadata.get("source_file", "Document inconnu")
+            grouped_sources[doc_name].append(doc)
+
+        return answer, docs, dict(grouped_sources)
