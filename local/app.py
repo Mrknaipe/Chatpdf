@@ -6,26 +6,26 @@ from rag_pipeline import load_and_split, build_vectorstore, ChatPDFRAG
 from image_analyzer import analyze_pdf_images
 
 st.set_page_config(page_title="ChatPDF — RAG (Ollama local)", layout="wide")
-st.title("📄 ChatPDF — RAG (Ollama en local)")
+st.title("📄 ChatPDF — RAG (Local Ollama)")
 
 with st.sidebar:
-    st.header("⚙️ Configuration")
+    st.header("⚙️ Settings")
     uploaded_files = st.file_uploader(
-        "Charger un ou plusieurs PDF",
+        "Upload one or more PDFs",
         type="pdf",
         accept_multiple_files=True
     )
 
-    ollama_model = st.text_input("Modèle Ollama (texte)", value="llama3.2")
-    vision_model = st.text_input("Modèle Ollama Vision", value="llama3.2-vision:11b")
+    ollama_model = st.text_input("Ollama model (text)", value="llama3.2")
+    vision_model = st.text_input("Ollama Vision model", value="llama3.2-vision:11b")
 
-    chunk_size = st.slider("Taille des chunks", 300, 1500, 800, step=100)
-    chunk_overlap = st.slider("Overlap des chunks", 0, 300, 150, step=50)
+    chunk_size = st.slider("Chunk size", 300, 1500, 800, step=100)
+    chunk_overlap = st.slider("Chunk overlap", 0, 300, 150, step=50)
     k_retrieval = st.slider("Top-k passages", 1, 8, 4)
     timeout = st.slider("Timeout Ollama (s)", 30, 600, 180, step=30)
 
-    analyze_images = st.checkbox("🖼️ Analyser les images / schémas", value=False)
-    process_btn = st.button("🔄 Indexer les documents")
+    analyze_images = st.checkbox("🖼️ Analyze images / diagrams", value=False)
+    process_btn = st.button("🔄 Index documents")
 
 if "rag" not in st.session_state:
     st.session_state.rag = None
@@ -48,7 +48,7 @@ if process_btn and uploaded_files:
     total_image_chunks = 0
     temp_paths = []
 
-    with st.spinner("Lecture + chunking + indexation..."):
+    with st.spinner("Reading + chunking + indexing..."):
         for doc_idx, uploaded_file in enumerate(uploaded_files, start=1):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(uploaded_file.read())
@@ -116,25 +116,25 @@ if process_btn and uploaded_files:
             os.unlink(path)
 
     st.success(
-        f"✅ {len(st.session_state.indexed_docs)} document(s) indexé(s) — "
-        f"{total_text_chunks} chunks texte + {total_image_chunks} chunks image."
+        f"✅ {len(st.session_state.indexed_docs)} document(s) indexed — "
+        f"{total_text_chunks} text chunks + {total_image_chunks} image chunks."
     )
 
     if analyze_images:
-        with st.expander("📊 Détail analyse image"):
+        with st.expander("📊 Image analysis details"):
             for doc_name, stats in st.session_state.doc_stats.items():
                 st.markdown(
                     f"- **{doc_name}** : "
-                    f"{stats['text_chunks']} chunks texte, "
-                    f"{stats['image_chunks']} chunks image, "
-                    f"{stats['candidate_pages']} page(s) candidate(s), "
-                    f"{stats['analyzed_pages']} page(s) analysée(s)."
+                    f"{stats['text_chunks']} text chunks, "
+                    f"{stats['image_chunks']} image chunks, "
+                    f"{stats['candidate_pages']} candidate page(s), "
+                    f"{stats['analyzed_pages']} analyzed page(s)."
                 )
 
 if st.session_state.rag:
-    st.subheader("Documents indexés")
+    st.subheader("Indexed documents")
     selected_files = st.multiselect(
-        "Limiter la recherche à certains PDF",
+        "Limit search to specific PDFs",
         options=st.session_state.indexed_docs,
         default=st.session_state.indexed_docs
     )
@@ -142,10 +142,10 @@ if st.session_state.rag:
     for role, msg in st.session_state.history:
         st.chat_message(role).write(msg)
 
-    if question := st.chat_input("Posez une question..."):
+    if question := st.chat_input("Ask a question..."):
         st.chat_message("user").write(question)
 
-        with st.spinner("Recherche + génération (Ollama)..."):
+        with st.spinner("Retrieval + generation (Ollama)..."):
             answer, sources, grouped_sources = st.session_state.rag.ask(
                 question,
                 selected_files=selected_files
@@ -153,13 +153,13 @@ if st.session_state.rag:
 
         st.chat_message("assistant").write(answer)
 
-        with st.expander("📄 Sources utilisées"):
+        with st.expander("📄 Sources used"):
             for doc_name, docs in grouped_sources.items():
                 st.markdown(f"### {doc_name}")
                 for i, doc in enumerate(docs, 1):
                     page = doc.metadata.get("page", "?")
                     content_type = doc.metadata.get("content_type", "text")
-                    label = "Image/Schéma" if content_type == "image" else "Texte"
+                    label = "Image/Diagram" if content_type == "image" else "Text"
 
                     st.markdown(
                         f"**[{i}] {label} — Page {page + 1 if isinstance(page, int) else page}**\n\n"
@@ -168,4 +168,4 @@ if st.session_state.rag:
 
         st.session_state.history += [("user", question), ("assistant", answer)]
 else:
-    st.info("Chargez un ou plusieurs PDF, puis cliquez sur « Indexer les documents ».")
+    st.info("Upload one or more PDFs, then click \"Index documents\".")

@@ -8,19 +8,19 @@ from langchain_community.vectorstores import FAISS
 
 from ollama_client import OllamaClient
 
-RAG_TEMPLATE = """Tu es un assistant expert en analyse de documents.
-Réponds UNIQUEMENT à partir des extraits fournis ci-dessous.
-Les extraits peuvent venir soit du texte du PDF, soit d'une description d'image/schéma.
-Quand l'information vient d'un schéma ou d'une image, indique-le clairement.
-Si la réponse ne se trouve pas dans les extraits, réponds exactement :
-"Je ne trouve pas cette information dans le document."
+RAG_TEMPLATE = """You are an expert assistant for document analysis.
+Answer ONLY from the excerpts provided below.
+The excerpts may come either from PDF text or from an image/diagram description.
+When information comes from a diagram or an image, state it clearly.
+If the answer is not in the excerpts, respond exactly with:
+"I cannot find this information in the document."
 
-Extraits :
+Excerpts:
 {context}
 
-Question : {question}
+Question: {question}
 
-Réponse :
+Answer:
 """
 
 def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file=None, doc_id=None):
@@ -28,7 +28,7 @@ def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file
     documents = loader.load()
 
     for doc in documents:
-        doc.metadata["source_file"] = source_file if source_file else doc.metadata.get("source", "inconnu")
+        doc.metadata["source_file"] = source_file if source_file else doc.metadata.get("source", "unknown")
         doc.metadata["doc_id"] = doc_id if doc_id else "unknown"
         doc.metadata["content_type"] = "text"
 
@@ -41,7 +41,7 @@ def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file
     chunks = splitter.split_documents(documents)
 
     for chunk in chunks:
-        chunk.metadata["source_file"] = source_file if source_file else chunk.metadata.get("source", "inconnu")
+        chunk.metadata["source_file"] = source_file if source_file else chunk.metadata.get("source", "unknown")
         chunk.metadata["doc_id"] = doc_id if doc_id else "unknown"
         chunk.metadata["content_type"] = "text"
 
@@ -71,10 +71,10 @@ def format_context(docs, max_chars=7000):
 
     for d in docs:
         page = d.metadata.get("page", "?")
-        source_file = d.metadata.get("source_file", "Document inconnu")
+        source_file = d.metadata.get("source_file", "Unknown document")
         content_type = d.metadata.get("content_type", "text")
 
-        prefix = "SCHÉMA/IMAGE" if content_type == "image" else "TEXTE"
+        prefix = "DIAGRAM/IMAGE" if content_type == "image" else "TEXT"
         chunk = f"[{prefix} | Document: {source_file} | Page: {page}] {d.page_content.strip()}"
 
         if total + len(chunk) > max_chars:
@@ -113,7 +113,7 @@ class ChatPDFRAG:
 
         grouped_sources = defaultdict(list)
         for doc in docs:
-            doc_name = doc.metadata.get("source_file", "Document inconnu")
+            doc_name = doc.metadata.get("source_file", "Unknown document")
             grouped_sources[doc_name].append(doc)
 
         return answer, docs, dict(grouped_sources)

@@ -10,10 +10,10 @@ from langchain_core.documents import Document
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
 VISION_PROMPT = """
-Tu analyses une page de PDF contenant potentiellement une image, un schéma, un graphe,
-un organigramme, un diagramme d'architecture, une figure technique ou une illustration.
+You analyze a PDF page that may contain an image, a diagram, a graph,
+an org chart, an architecture diagram, a technical figure, or an illustration.
 
-Réponds en JSON strict avec les clés suivantes :
+Reply in strict JSON with the following keys:
 - is_relevant_image: bool
 - image_type: string
 - visible_text: string
@@ -21,11 +21,11 @@ Réponds en JSON strict avec les clés suivantes :
 - relationships: array of strings
 - summary: string
 
-Règles :
-- Si la page ne contient pas d'image informative ou pas de schéma utile, mets is_relevant_image à false.
-- visible_text doit contenir le texte lisible dans l'image/schéma.
-- summary doit être factuel, court et exploitable pour une recherche RAG.
-- N'invente rien.
+Rules:
+- If the page does not contain an informative image or a useful diagram, set is_relevant_image to false.
+- visible_text must contain the readable text in the image/diagram.
+- summary must be factual, short, and useful for RAG retrieval.
+- Do not invent anything.
 """
 
 def encode_image_to_base64(image_path: str) -> str:
@@ -127,11 +127,11 @@ def image_analysis_to_document(result: dict, source_file: str, doc_id: str, page
     relationships = result.get("relationships", [])
 
     text = f"""
-Type d'image: {image_type}
-Texte visible: {visible_text}
-Éléments clés: {", ".join(key_elements)}
+Image type: {image_type}
+Visible text: {visible_text}
+Key elements: {", ".join(key_elements)}
 Relations: {" | ".join(relationships)}
-Résumé: {summary}
+Summary: {summary}
 """.strip()
 
     return Document(
