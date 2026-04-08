@@ -1,4 +1,4 @@
-# ChatPDF RAG with Ollama and Streamlit
+# ChatPDF RAG with Ollama and Streamlit (use local folder for now)
 
 A local **Streamlit** application for chatting with one or more PDF files using a Retrieval-Augmented Generation (RAG) pipeline powered by **LangChain**, **FAISS**, **sentence-transformers**, and **Ollama**. The project supports classic text-based PDF RAG and can be extended with image/schema analysis through a vision model served by Ollama.[web:44][web:45][web:31]
 
