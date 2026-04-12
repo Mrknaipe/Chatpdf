@@ -5,6 +5,19 @@ import os
 from rag_pipeline import load_and_split, build_vectorstore, ChatPDFRAG
 from image_analyzer import analyze_pdf_images
 
+import shutil
+import os
+
+# Chemin absolu vers faiss_index, peu importe d'où on lance le script
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FAISS_DIR = os.path.join(BASE_DIR, "faiss_index")
+
+# Nettoyage de la session précédente
+if os.path.exists(FAISS_DIR):
+    shutil.rmtree(FAISS_DIR)
+    print("--- faiss_index nettoyé ---")
+
+
 st.set_page_config(page_title="ChatPDF — RAG (Ollama local)", layout="wide")
 st.title("📄 ChatPDF — RAG (Local Ollama)")
 

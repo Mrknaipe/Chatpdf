@@ -8,6 +8,11 @@ from langchain_community.vectorstores import FAISS
 
 from ollama_client import OllamaClient
 
+import os
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FAISS_DIR = os.path.join(BASE_DIR, "faiss_index")
+
 RAG_TEMPLATE = """You are an expert assistant for document analysis.
 Answer ONLY from the excerpts provided below.
 The excerpts may come either from PDF text or from an image/diagram description.
@@ -54,13 +59,13 @@ def build_vectorstore(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2
         encode_kwargs={"normalize_embeddings": True},
     )
     vectorstore = FAISS.from_documents(chunks, embeddings)
-    vectorstore.save_local("faiss_index")
+    vectorstore.save_local(FAISS_DIR)
     return vectorstore, embeddings
 
 def load_vectorstore(model_name="sentence-transformers/all-MiniLM-L6-v2"):
     embeddings = HuggingFaceEmbeddings(model_name=model_name)
     return FAISS.load_local(
-        "faiss_index",
+        FAISS_DIR,
         embeddings,
         allow_dangerous_deserialization=True
     )
