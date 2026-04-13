@@ -1,5 +1,7 @@
 import subprocess
 import sys
+import re
+import requests
 
 class OllamaClient:
     def __init__(self, model: str = "gemma3:12b"):
@@ -38,6 +40,12 @@ class OllamaClient:
             # Check whether the response is empty.
             if not response or len(response) < 5:
                 return "Error: empty response from Ollama"
+
+            response = (result.stdout or "").strip()
+
+            # Nettoie les séquences ANSI et caractères de contrôle
+            response = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', response)
+            response = re.sub(r'[\x00-\x1f\x7f]', '', response
 
             return response
 
