@@ -45,7 +45,7 @@ class OllamaClient:
 
             # Nettoie les séquences ANSI et caractères de contrôle
             response = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', response)
-            response = re.sub(r'[\x00-\x1f\x7f]', '', response
+            response = re.sub(r'[\x00-\x1f\x7f]', '', response)
 
             return response
 
