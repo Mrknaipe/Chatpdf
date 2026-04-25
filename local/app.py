@@ -50,11 +50,14 @@ if "indexed_docs" not in st.session_state:
     st.session_state.indexed_docs = []
 if "doc_stats" not in st.session_state:
     st.session_state.doc_stats = {}
+if "parent_store" not in st.session_state:
+    st.session_state.parent_store = {}
 
 if process_btn and uploaded_files:
     st.session_state.chunks_by_doc = {}
     st.session_state.indexed_docs = []
     st.session_state.doc_stats = {}
+    st.session_state.parent_store = {}
 
     all_chunks = []
     total_text_chunks = 0
@@ -70,13 +73,14 @@ if process_btn and uploaded_files:
 
             pdf_name = uploaded_file.name
 
-            text_chunks = load_and_split(
+            text_chunks, parent_store = load_and_split(
                 pdf_path=tmp_path,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
                 source_file=pdf_name,
                 doc_id=str(doc_idx)
             )
+            st.session_state.parent_store.update(parent_store)
 
             image_chunks = []
             image_stats = {
@@ -161,7 +165,8 @@ if st.session_state.rag:
         with st.spinner("Retrieval + generation (Ollama)..."):
             answer, sources, grouped_sources = st.session_state.rag.ask(
                 question,
-                selected_files=selected_files
+                selected_files=selected_files,
+                parent_store=st.session_state.parent_store
             )
 
         st.chat_message("assistant").write(answer)
