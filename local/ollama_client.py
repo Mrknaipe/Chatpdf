@@ -18,40 +18,28 @@ class OllamaClient:
             sys.exit(1)
 
     def call_ollama(self, prompt: str, timeout: int = 180) -> str:
-        """Calls Ollama with Windows encoding handling."""
         try:
-            # Force UTF-8 encoding on Windows.
-            result = subprocess.run(
-                ['ollama', 'run', self.model, prompt],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                encoding='utf-8',
-                errors='replace'  # Replaces problematic characters.
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=timeout
             )
 
-            # If ollama returns an error, display it.
-            if result.returncode != 0:
-                err = (result.stderr or "").strip()
-                return f"Ollama error (code {result.returncode}): {err[:500]}"
+            if response.status_code != 200:
+                return f"Ollama error (code {response.status_code}): {response.text[:500]}"
 
-            response = (result.stdout or "").strip()
+            answer = response.json().get("response", "").strip()
 
-            # Check whether the response is empty.
-            if not response or len(response) < 5:
+            if not answer or len(answer) < 5:
                 return "Error: empty response from Ollama"
 
-            response = (result.stdout or "").strip()
+            return answer
 
-            # Nettoie les séquences ANSI et caractères de contrôle
-            response = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', response)
-            response = re.sub(r'[\x00-\x1f\x7f]', '', response)
-
-            return response
-
-        except subprocess.TimeoutExpired:
+        except requests.Timeout:
             return f"Timeout after {timeout}s - The model took too long"
-        except UnicodeDecodeError as e:
-            return f"Encoding error: {str(e)}"
         except Exception as e:
             return f"Error: {str(e)}"
