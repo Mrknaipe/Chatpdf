@@ -1,3 +1,6 @@
+# utilisé .\local\run.bat dans le terminal
+
+
 streamlit
 requests
 pymupdf
