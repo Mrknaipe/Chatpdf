@@ -11,9 +11,9 @@ class OllamaClient:
         """Checks that Ollama is installed and accessible."""
         try:
             subprocess.run(['ollama', '--version'], capture_output=True, check=True)
-            print(f"✅ Ollama detected - Model: {self.model}\n")
+            print(f"Ollama detected - Model: {self.model}\n")
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("❌ Error: Ollama is not installed or not in PATH")
+            print("Error: Ollama is not installed or not in PATH")
             print("Install Ollama from: https://ollama.ai")
             sys.exit(1)
 

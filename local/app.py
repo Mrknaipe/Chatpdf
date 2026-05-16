@@ -166,7 +166,8 @@ if st.session_state.rag:
             answer, sources, grouped_sources = st.session_state.rag.ask(
                 question,
                 selected_files=selected_files,
-                parent_store=st.session_state.parent_store
+                parent_store=st.session_state.parent_store,
+                history=st.session_state.history
             )
 
         st.chat_message("assistant").write(answer)

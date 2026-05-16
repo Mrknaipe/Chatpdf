@@ -23,6 +23,9 @@ If the answer is not in the excerpts, respond exactly with:
 Excerpts:
 {context}
 
+Conversation history:
+{history}
+
 Question: {question}
 
 Answer:
@@ -136,7 +139,7 @@ class ChatPDFRAG:
         self.ollama = OllamaClient(model=ollama_model)
         self.ollama.verify_ollama()
 
-    def ask(self, question: str, selected_files=None, parent_store=None):
+    def ask(self, question: str, selected_files=None, parent_store=None, history=None):
         filter_dict = None
         if selected_files:
             filter_dict = {"source_file": {"$in": selected_files}}
@@ -169,8 +172,16 @@ class ChatPDFRAG:
                 # pas de parent_store → comportement classique
                 context_docs.append(child)
 
+        history_text = ""
+        if history:
+            exchanges = []
+            for role, msg in history[-6:]:  # garde les 3 derniers échanges
+                prefix = "User" if role == "user" else "Assistant"
+                exchanges.append(f"{prefix}: {msg}")
+            history_text = "\n".join(exchanges)
+
         context = format_context(context_docs)
-        prompt = RAG_TEMPLATE.format(context=context, question=question)
+        prompt = RAG_TEMPLATE.format(context=context,history=history_text, question=question)
         answer = self.ollama.call_ollama(prompt, timeout=self.timeout)
 
         grouped_sources = defaultdict(list)
