@@ -1,22 +1,23 @@
 import streamlit as st
 import tempfile
 import os
+import shutil
+import json
+import time
+import numpy as np
+from rouge_score import rouge_scorer
 
 from rag_pipeline import load_and_split, build_vectorstore, ChatPDFRAG
 from image_analyzer import analyze_pdf_images
 
-import shutil
-import os
-
-# Chemin absolu vers faiss_index, peu importe d'où on lance le script
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FAISS_DIR = os.path.join(BASE_DIR, "faiss_index")
 
-# Nettoyage de la session précédente
-if os.path.exists(FAISS_DIR):
-    shutil.rmtree(FAISS_DIR)
-    print("--- faiss_index nettoyé ---")
-
+if "initialized" not in st.session_state:
+    if os.path.exists(FAISS_DIR):
+        shutil.rmtree(FAISS_DIR)
+        print("--- faiss_index nettoyé ---")
+    st.session_state.initialized = True
 
 st.set_page_config(page_title="ChatPDF — RAG (Ollama local)", layout="wide")
 st.title("📄 ChatPDF — RAG (Local Ollama)")
@@ -148,43 +149,185 @@ if process_btn and uploaded_files:
                     f"{stats['analyzed_pages']} analyzed page(s)."
                 )
 
-if st.session_state.rag:
-    st.subheader("Indexed documents")
-    selected_files = st.multiselect(
-        "Limit search to specific PDFs",
-        options=st.session_state.indexed_docs,
-        default=st.session_state.indexed_docs
-    )
+tab1, tab2 = st.tabs(["💬 Chat", "📊 Évaluation du modèle"])
+with tab1:
+    if not st.session_state.rag:
+        st.info("Upload one or more PDFs, then click \"Index documents\".")
+    else:
+        st.subheader("Indexed documents")
+        selected_files = st.multiselect(
+            "Limit search to specific PDFs",
+            options=st.session_state.indexed_docs,
+            default=st.session_state.indexed_docs
+        )
 
-    for role, msg in st.session_state.history:
-        st.chat_message(role).write(msg)
+        for role, msg in st.session_state.history:
+            st.chat_message(role).write(msg)
 
-    if question := st.chat_input("Ask a question..."):
-        st.chat_message("user").write(question)
+        if question := st.chat_input("Ask a question..."):
+            st.chat_message("user").write(question)
 
-        with st.spinner("Retrieval + generation (Ollama)..."):
-            answer, sources, grouped_sources = st.session_state.rag.ask(
-                question,
-                selected_files=selected_files,
-                parent_store=st.session_state.parent_store,
-                history=st.session_state.history
+            with st.spinner("Retrieval + generation (Ollama)..."):
+                answer, sources, grouped_sources = st.session_state.rag.ask(
+                    question,
+                    selected_files=selected_files,
+                    parent_store=st.session_state.parent_store,
+                    history=st.session_state.history
+                )
+
+            st.chat_message("assistant").write(answer)
+
+            with st.expander("Sources used"):
+                for doc_name, docs in grouped_sources.items():
+                    st.markdown(f"### {doc_name}")
+                    for i, doc in enumerate(docs, 1):
+                        page = doc.metadata.get("page", "?")
+                        content_type = doc.metadata.get("content_type", "text")
+                        label = "Image/Diagram" if content_type == "image" else "Text"
+                        st.markdown(
+                            f"**[{i}] {label} — Page {page + 1 if isinstance(page, int) else page}**\n\n"
+                            f"> {doc.page_content[:500]}..."
+                        )
+
+            st.session_state.history += [("user", question), ("assistant", answer)]
+
+with tab2:
+    from rouge_score import rouge_scorer
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    st.markdown("### Model Quality Evaluation")
+
+    EVAL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evaluation")
+    EVAL_PDF = os.path.join(EVAL_DIR, "electricite.pdf")
+    EVAL_JSON = os.path.join(EVAL_DIR, "test.json")
+
+    if not os.path.exists(EVAL_PDF) or not os.path.exists(EVAL_JSON):
+        st.error("❌ Missing files in the evaluation folder/")
+    else:
+        st.success("✅ Evaluation files detected")
+
+        with open(EVAL_JSON, "r", encoding="utf-8") as f:
+            test = json.load(f)
+
+        st.info(f"{len(test)} assigned reference question(s)")
+
+        with st.expander("📋 see the questions"):
+            for i, case in enumerate(test, 1):
+                st.markdown(f"**Q{i}:** {case['question']}")
+                st.markdown(f"**Response expected:** {case['expected_answer']}")
+                st.divider()
+
+        if st.button("🚀 Start the assessment"):
+
+
+            if "eval_rag" not in st.session_state:
+                with st.spinner("Indexing of the reference document..."):
+                    eval_chunks, eval_parent_store = load_and_split(
+                        pdf_path=EVAL_PDF,
+                        chunk_size=800,
+                        chunk_overlap=150,
+                        source_file="electricite.pdf",
+                        doc_id="eval"
+                    )
+                    eval_vectorstore, _ = build_vectorstore(eval_chunks)
+                    st.session_state.eval_rag = ChatPDFRAG(
+                        vectorstore=eval_vectorstore,
+                        ollama_model=ollama_model,
+                        k=4,
+                        timeout=timeout
+                    )
+                    st.session_state.eval_parent_store = eval_parent_store
+
+            embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+            scorer = rouge_scorer.RougeScorer(
+                ['rouge1', 'rouge2', 'rougeL'],
+                use_stemmer=True
             )
 
-        st.chat_message("assistant").write(answer)
+            results = []
+            progress = st.progress(0)
+            status = st.empty()
 
-        with st.expander("📄 Sources used"):
-            for doc_name, docs in grouped_sources.items():
-                st.markdown(f"### {doc_name}")
-                for i, doc in enumerate(docs, 1):
-                    page = doc.metadata.get("page", "?")
-                    content_type = doc.metadata.get("content_type", "text")
-                    label = "Image/Diagram" if content_type == "image" else "Text"
+            for idx, case in enumerate(test):
+                question = case["question"]
+                reference = case["expected_answer"]
 
-                    st.markdown(
-                        f"**[{i}] {label} — Page {page + 1 if isinstance(page, int) else page}**\n\n"
-                        f"> {doc.page_content[:500]}..."
-                    )
+                status.text(f"Question {idx + 1}/{len(test)} : {question[:60]}...")
 
-        st.session_state.history += [("user", question), ("assistant", answer)]
-else:
-    st.info("Upload one or more PDFs, then click \"Index documents\".")
+                start = time.time()
+                answer, sources, _ = st.session_state.eval_rag.ask(
+                    question,
+                    parent_store=st.session_state.eval_parent_store
+                )
+                elapsed = time.time() - start
+
+                rouge_scores = scorer.score(reference, answer)
+
+                vec1 = embed_model.encode([answer])
+                vec2 = embed_model.encode([reference])
+                similarity = float(cosine_similarity(vec1, vec2)[0][0])
+
+                refused = "cannot find" in answer.lower()
+                response_length = len(answer.split())
+
+                results.append({
+                    "question": question,
+                    "expected": reference,
+                    "generated": answer,
+                    "rouge1": round(rouge_scores['rouge1'].fmeasure, 3),
+                    "rouge2": round(rouge_scores['rouge2'].fmeasure, 3),
+                    "rougeL": round(rouge_scores['rougeL'].fmeasure, 3),
+                    "similarity": round(similarity, 3),
+                    "response_time_s": round(elapsed, 2),
+                    "refused": refused,
+                    "response_length_words": response_length,
+                })
+
+                progress.progress((idx + 1) / len(test))
+
+            status.text("✅ Evaluation completed !")
+
+            st.markdown("---")
+            st.markdown("### Overall results")
+
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            col1.metric("Average ROUGE-1", round(np.mean([r["rouge1"] for r in results]), 3))
+            col2.metric("Average ROUGE-2", round(np.mean([r["rouge2"] for r in results]), 3))
+            col3.metric("Average ROUGE-L", round(np.mean([r["rougeL"] for r in results]), 3))
+            col4.metric("Average similarity", round(np.mean([r["similarity"] for r in results]), 3))
+            col5.metric("Average time", f"{round(np.mean([r['response_time_s'] for r in results]), 1)}s")
+            col6.metric("Rejection rate", f"{round(sum(r['refused'] for r in results) / len(results) * 100)}%")
+
+            st.markdown("### Details by question")
+
+            for r in results:
+                if r["similarity"] >= 0.8:
+                    icon = "🟢"
+                elif r["similarity"] >= 0.6:
+                    icon = "🟡"
+                else:
+                    icon = "🔴"
+
+                with st.expander(f"{icon} Q: {r['question'][:70]}..."):
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("ROUGE-1", r["rouge1"])
+                    col1.metric("ROUGE-2", r["rouge2"])
+                    col2.metric("ROUGE-L", r["rougeL"])
+                    col2.metric("Similarity", r["similarity"])
+                    col3.metric("Time", f"{r['response_time_s']}s")
+                    col3.metric("length", f"{r['response_length_words']} mots")
+
+                    st.markdown(f"**Response expected :**\n> {r['expected']}")
+                    st.markdown(f"**Response generated :**\n> {r['generated']}")
+
+                    if r["refused"]:
+                        st.warning("⚠️ The model refused to answer")
+
+            st.markdown("---")
+            st.download_button(
+                label="⬇️ Download the results (JSON)",
+                data=json.dumps(results, ensure_ascii=False, indent=2),
+                file_name="evaluation_results.json",
+                mime="application/json"
+            )

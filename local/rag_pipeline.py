@@ -89,13 +89,16 @@ def load_and_split(pdf_path: str, chunk_size=800, chunk_overlap=150, source_file
     return all_child_chunks, parent_store
 
 
-def build_vectorstore(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2"):
-    embeddings = HuggingFaceEmbeddings(
+def get_embeddings(model_name="sentence-transformers/all-MiniLM-L6-v2"):
+    print("Chargement du modèle d'embeddings...")
+    return HuggingFaceEmbeddings(
         model_name=model_name,
         model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
-    # Seuls les enfants sont vectorisés dans FAISS
+
+def build_vectorstore(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2"):
+    embeddings = get_embeddings(model_name)
     vectorstore = FAISS.from_documents(chunks, embeddings)
     vectorstore.save_local(FAISS_DIR)
     return vectorstore, embeddings

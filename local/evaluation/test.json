@@ -1,0 +1,26 @@
+[
+    {
+        "question": "Qu'est-ce qu'un circuit électrique ?",
+        "expected_answer": "Un circuit électrique est constitué de dipôles comme un générateur, une pile, un moteur électrique ou une DEL. C'est grâce à la tension électrique U du générateur qu'un courant électrique peut circuler avec une certaine intensité I."
+    },
+    {
+        "question": "Quelle est la différence entre un circuit ouvert et un circuit fermé ?",
+        "expected_answer": "Lorsque le courant électrique circule, le circuit est fermé car la boucle est fermée. Lorsque le courant électrique ne circule pas, le circuit est ouvert car la boucle est ouverte."
+    },
+    {
+        "question": "Quel est le sens conventionnel du courant électrique ?",
+        "expected_answer": "Le courant électrique circule de la borne positive à la borne négative du générateur."
+    },
+    {
+        "question": "Que se passe-t-il si une lampe grille dans un circuit en série ?",
+        "expected_answer": "Dans un circuit en série, si une lampe grille, l'autre s'éteint car le circuit est ouvert et aucun courant ne circule."
+    },
+    {
+        "question": "Que se passe-t-il si une lampe grille dans un circuit avec dérivations ?",
+        "expected_answer": "Dans un circuit avec dérivations, si une lampe grille, l'autre brille toujours car une boucle reste fermée."
+    },
+    {
+        "question": "Qu'est-ce qu'un court-circuit et quels sont ses dangers ?",
+        "expected_answer": "Un dipôle est en court-circuit lorsque ses deux bornes sont reliées par un fil ou un interrupteur fermé. Le court-circuit du générateur peut provoquer un incendie et la destruction du générateur."
+    }
+]

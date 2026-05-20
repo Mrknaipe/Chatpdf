@@ -21,3 +21,5 @@ faiss-cpu
 
 # Ollama
 ollama
+
+rouge-score
