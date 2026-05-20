@@ -5,8 +5,6 @@ import shutil
 import json
 import time
 import numpy as np
-from rouge_score import rouge_scorer
-
 from rag_pipeline import load_and_split, build_vectorstore, ChatPDFRAG
 from image_analyzer import analyze_pdf_images
 
@@ -16,7 +14,7 @@ FAISS_DIR = os.path.join(BASE_DIR, "faiss_index")
 if "initialized" not in st.session_state:
     if os.path.exists(FAISS_DIR):
         shutil.rmtree(FAISS_DIR)
-        print("--- faiss_index nettoyé ---")
+        print("--- faiss_index cleaned ---")
     st.session_state.initialized = True
 
 st.set_page_config(page_title="ChatPDF — RAG (Ollama local)", layout="wide")
@@ -149,7 +147,7 @@ if process_btn and uploaded_files:
                     f"{stats['analyzed_pages']} analyzed page(s)."
                 )
 
-tab1, tab2 = st.tabs(["💬 Chat", "📊 Évaluation du modèle"])
+tab1, tab2 = st.tabs(["💬 Chat", "📊 Model Evaluation"])
 with tab1:
     if not st.session_state.rag:
         st.info("Upload one or more PDFs, then click \"Index documents\".")
@@ -177,7 +175,7 @@ with tab1:
 
             st.chat_message("assistant").write(answer)
 
-            with st.expander("Sources used"):
+            with st.expander("📄 Sources used"):
                 for doc_name, docs in grouped_sources.items():
                     st.markdown(f"### {doc_name}")
                     for i, doc in enumerate(docs, 1):
@@ -203,26 +201,35 @@ with tab2:
     EVAL_JSON = os.path.join(EVAL_DIR, "test.json")
 
     if not os.path.exists(EVAL_PDF) or not os.path.exists(EVAL_JSON):
-        st.error("❌ Missing files in the evaluation folder/")
+        st.error("❌ Missing files in the evaluation/ folder")
     else:
         st.success("✅ Evaluation files detected")
 
         with open(EVAL_JSON, "r", encoding="utf-8") as f:
             test = json.load(f)
 
-        st.info(f"{len(test)} assigned reference question(s)")
+        st.info(f"{len(test)} reference question(s) loaded")
 
-        with st.expander("📋 see the questions"):
+        with st.expander("📋 View test questions"):
             for i, case in enumerate(test, 1):
                 st.markdown(f"**Q{i}:** {case['question']}")
-                st.markdown(f"**Response expected:** {case['expected_answer']}")
+                st.markdown(f"**Expected answer:** {case['expected_answer']}")
                 st.divider()
 
-        if st.button("🚀 Start the assessment"):
+        n_runs = st.slider(
+            label="Number of repetitions per question",
+            min_value=1,
+            max_value=10,
+            value=3,
+            step=1
+        )
 
 
+        if st.button("🚀 Launch evaluation"):
+
+            # Index electricite.pdf separately if not already done
             if "eval_rag" not in st.session_state:
-                with st.spinner("Indexing of the reference document..."):
+                with st.spinner("Indexing reference document..."):
                     eval_chunks, eval_parent_store = load_and_split(
                         pdf_path=EVAL_PDF,
                         chunk_size=800,
@@ -248,85 +255,116 @@ with tab2:
             results = []
             progress = st.progress(0)
             status = st.empty()
+            total_steps = len(test) * n_runs
 
             for idx, case in enumerate(test):
                 question = case["question"]
                 reference = case["expected_answer"]
 
-                status.text(f"Question {idx + 1}/{len(test)} : {question[:60]}...")
+                status.text(f"Question {idx + 1}/{len(test)}: {question[:60]}...")
 
-                start = time.time()
-                answer, sources, _ = st.session_state.eval_rag.ask(
-                    question,
-                    parent_store=st.session_state.eval_parent_store
-                )
-                elapsed = time.time() - start
+                run_results = []
 
-                rouge_scores = scorer.score(reference, answer)
+                for run in range(n_runs):
+                    status.text(
+                        f"Question {idx + 1}/{len(test)} — "
+                        f"Run {run + 1}/{n_runs}: {question[:50]}..."
+                    )
 
-                vec1 = embed_model.encode([answer])
-                vec2 = embed_model.encode([reference])
-                similarity = float(cosine_similarity(vec1, vec2)[0][0])
+                    start = time.time()
+                    answer, sources, _ = st.session_state.eval_rag.ask(
+                        question,
+                        parent_store=st.session_state.eval_parent_store
+                    )
+                    elapsed = time.time() - start
 
-                refused = "cannot find" in answer.lower()
-                response_length = len(answer.split())
+                    rouge_scores = scorer.score(reference, answer)
+                    vec1 = embed_model.encode([answer])
+                    vec2 = embed_model.encode([reference])
+                    similarity = float(cosine_similarity(vec1, vec2)[0][0])
+
+                    run_results.append({
+                        "run": run + 1,
+                        "answer": answer,
+                        "rouge1": round(rouge_scores['rouge1'].fmeasure, 3),
+                        "rouge2": round(rouge_scores['rouge2'].fmeasure, 3),
+                        "rougeL": round(rouge_scores['rougeL'].fmeasure, 3),
+                        "similarity": round(similarity, 3),
+                        "response_time_s": round(elapsed, 2),
+                        "refused": "cannot find" in answer.lower(),
+                    })
+
+                    progress.progress((idx * n_runs + run + 1) / total_steps)
 
                 results.append({
                     "question": question,
                     "expected": reference,
-                    "generated": answer,
-                    "rouge1": round(rouge_scores['rouge1'].fmeasure, 3),
-                    "rouge2": round(rouge_scores['rouge2'].fmeasure, 3),
-                    "rougeL": round(rouge_scores['rougeL'].fmeasure, 3),
-                    "similarity": round(similarity, 3),
-                    "response_time_s": round(elapsed, 2),
-                    "refused": refused,
-                    "response_length_words": response_length,
+                    "runs": run_results,
+                    "rouge1_mean": round(np.mean([r["rouge1"] for r in run_results]), 3),
+                    "rouge1_std": round(np.std([r["rouge1"] for r in run_results]), 3),
+                    "rouge2_mean": round(np.mean([r["rouge2"] for r in run_results]), 3),
+                    "rougeL_mean": round(np.mean([r["rougeL"] for r in run_results]), 3),
+                    "similarity_mean": round(np.mean([r["similarity"] for r in run_results]), 3),
+                    "similarity_std": round(np.std([r["similarity"] for r in run_results]), 3),
+                    "time_mean": round(np.mean([r["response_time_s"] for r in run_results]), 2),
+                    "refused_rate": round(sum(r["refused"] for r in run_results) / n_runs, 3),
                 })
 
-                progress.progress((idx + 1) / len(test))
+            status.text("✅ Evaluation complete!")
 
-            status.text("✅ Evaluation completed !")
-
+            # Global results
             st.markdown("---")
-            st.markdown("### Overall results")
+            st.markdown("### Global Results")
 
             col1, col2, col3, col4, col5, col6 = st.columns(6)
-            col1.metric("Average ROUGE-1", round(np.mean([r["rouge1"] for r in results]), 3))
-            col2.metric("Average ROUGE-2", round(np.mean([r["rouge2"] for r in results]), 3))
-            col3.metric("Average ROUGE-L", round(np.mean([r["rougeL"] for r in results]), 3))
-            col4.metric("Average similarity", round(np.mean([r["similarity"] for r in results]), 3))
-            col5.metric("Average time", f"{round(np.mean([r['response_time_s'] for r in results]), 1)}s")
-            col6.metric("Rejection rate", f"{round(sum(r['refused'] for r in results) / len(results) * 100)}%")
+            col1.metric("Avg ROUGE-1", round(np.mean([r["rouge1_mean"] for r in results]), 3))
+            col2.metric("Avg ROUGE-2", round(np.mean([r["rouge2_mean"] for r in results]), 3))
+            col3.metric("Avg ROUGE-L", round(np.mean([r["rougeL_mean"] for r in results]), 3))
+            col4.metric("Avg Similarity", round(np.mean([r["similarity_mean"] for r in results]), 3))
+            col5.metric("Avg Time", f"{round(np.mean([r['time_mean'] for r in results]), 1)}s")
+            col6.metric("Refusal Rate", f"{round(np.mean([r['refused_rate'] for r in results]) * 100)}%")
 
-            st.markdown("### Details by question")
+            # Per question detail
+            st.markdown("### Detail per question")
 
             for r in results:
-                if r["similarity"] >= 0.8:
+                if r["similarity_mean"] >= 0.8:
                     icon = "🟢"
-                elif r["similarity"] >= 0.6:
+                elif r["similarity_mean"] >= 0.6:
                     icon = "🟡"
                 else:
                     icon = "🔴"
 
                 with st.expander(f"{icon} Q: {r['question'][:70]}..."):
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("ROUGE-1", r["rouge1"])
-                    col1.metric("ROUGE-2", r["rouge2"])
-                    col2.metric("ROUGE-L", r["rougeL"])
-                    col2.metric("Similarity", r["similarity"])
-                    col3.metric("Time", f"{r['response_time_s']}s")
-                    col3.metric("length", f"{r['response_length_words']} mots")
 
-                    st.markdown(f"**Response expected :**\n> {r['expected']}")
-                    st.markdown(f"**Response generated :**\n> {r['generated']}")
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Avg ROUGE-1", r["rouge1_mean"])
+                    col2.metric("Avg Similarity", r["similarity_mean"])
+                    col3.metric(
+                        "Stability (std)",
+                        r["similarity_std"],
+                        help="Closer to 0 = stable answers"
+                    )
+                    col4.metric("Refusal Rate", f"{round(r['refused_rate'] * 100)}%")
 
-                    if r["refused"]:
-                        st.warning("⚠️ The model refused to answer")
+                    st.markdown(f"**Expected answer:**\n> {r['expected']}")
 
+                    st.markdown("**Run details:**")
+                    for run in r["runs"]:
+                        st.markdown(
+                            f"- **Run {run['run']}** — "
+                            f"ROUGE-1: `{run['rouge1']}` | "
+                            f"Similarity: `{run['similarity']}` | "
+                            f"Time: `{run['response_time_s']}s` | "
+                            f"{'⚠️ Refused' if run['refused'] else '✅'}"
+                        )
+                        with st.expander(f"View answer for run {run['run']}"):
+                            st.write(run["answer"])
+
+            # Export
             st.markdown("---")
             st.download_button(
-                label="⬇️ Download the results (JSON)",
+                label="⬇️ Download results (JSON)",
                 data=json.dumps(results, ensure_ascii=False, indent=2),
                 file_name="evaluation_results.json",
                 mime="application/json"
