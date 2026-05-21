@@ -28,8 +28,27 @@ with st.sidebar:
         accept_multiple_files=True
     )
 
-    ollama_model = st.text_input("Ollama model (text)", value="llama3.2")
-    vision_model = st.text_input("Ollama Vision model", value="llama3.2-vision:11b")
+    TEXT_MODELS = [
+    "llama3.2",
+    "llama3.1",
+    "mistral",
+    "mistral-nemo",
+    "gemma3",
+    "gemma3:12b",
+    "phi4",
+    "deepseek-r1:8b",
+    ]
+
+    VISION_MODELS = [
+    "llama3.2-vision:11b",
+    "llava",
+    "llava:13b",
+    "minicpm-v",
+    "moondream",
+    ]
+
+    ollama_model = st.selectbox("Ollama model (text)", options=TEXT_MODELS)
+    vision_model = st.selectbox("Ollama Vision model", options=VISION_MODELS)
 
     chunk_size = st.slider("Chunk size", 300, 1500, 800, step=100)
     chunk_overlap = st.slider("Chunk overlap", 0, 300, 150, step=50)
