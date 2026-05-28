@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import pptx; print\\(pptx.__version__\\)\")",
+      "Bash(pip install *)",
+      "Bash(python build_poster.py)",
+      "PowerShell(python C:\\\\Code\\\\py\\\\ChatpdfRag\\\\poster\\\\build_poster.py)",
+      "PowerShell($soffice = \"C:\\\\Program Files\\\\LibreOffice\\\\program\\\\soffice.exe\"; if \\(Test-Path $soffice\\) { & $soffice --headless --convert-to pdf --outdir C:\\\\Code\\\\py\\\\ChatpdfRag\\\\poster C:\\\\Code\\\\py\\\\ChatpdfRag\\\\poster\\\\poster_chatpdf_rag.pptx } else { \"no soffice\" })",
+      "PowerShell($ppt = New-Object -ComObject PowerPoint.Application; $ppt.Visible = [Microsoft.Office.Core.MsoTriState]::msoTrue; $pres = $ppt.Presentations.Open\\(\"C:\\\\Code\\\\py\\\\ChatpdfRag\\\\poster\\\\poster_chatpdf_rag.pptx\", $true, $false, $false\\); $pres.SaveAs\\(\"C:\\\\Code\\\\py\\\\ChatpdfRag\\\\poster\\\\poster_chatpdf_rag.pdf\", 32\\); $pres.Close\\(\\); $ppt.Quit\\(\\); \"done\")"
+    ]
+  }
+}

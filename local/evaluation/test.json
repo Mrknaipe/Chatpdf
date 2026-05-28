@@ -22,5 +22,10 @@
     {
         "question": "Qu'est-ce qu'un court-circuit et quels sont ses dangers ?",
         "expected_answer": "Un dipôle est en court-circuit lorsque ses deux bornes sont reliées par un fil ou un interrupteur fermé. Le court-circuit du générateur peut provoquer un incendie et la destruction du générateur."
+    },
+
+    {
+        "question": "Qu'est-ce qu'un régime triphasé ?",
+        "expected_answer": "Le document ne contient pas d'information sur le régime triphasé.   "
     }
 ]
