@@ -1,0 +1,10 @@
+
+# added by backup script
+.env
+.env.*
+!.env.example
+node_modules/
+.venv/
+__pycache__/
+*.pem
+*.key
